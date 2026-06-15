@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mural do Casal - Fortaleça seu relacionamento 💑</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@4.3.0/fonts/remixicon.css" rel="stylesheet">
+    <style>
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-15px); }
+        }
+        .animate-fade-in { animation: fadeIn 0.5s ease-out; }
+        .animate-float { animation: float 5s ease-in-out infinite; }
+        .glass {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .glass-dark {
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .dark .glass { background: rgba(0, 0, 0, 0.4); }
+        * { transition: all 0.2s ease; }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.6);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal.active { display: flex; }
+        .modal-content { max-width: 500px; width: 90%; max-height: 85vh; overflow-y: auto; }
+        input:focus, select:focus, textarea:focus {
+            transform: scale(1.01);
+            box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.3);
+            outline: none;
+        }
+        .hover-lift:hover { transform: translateY(-2px); box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body class="transition-colors duration-300">
+    <div id="app"></div>
+
+    <script>
+        const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+            ? 'http://localhost:3000/api' 
+            : '/api';
+        let currentUser = null;
+        let token = localStorage.getItem('token');
+        let currentTheme = localStorage.getItem('theme') || 'dark';
+        let complaints = [];
+
+        if (currentTheme === 'dark') {
+            document.body.classList.add('dark', 'bg-gray-900');
+        } else {
+            document.body.classList.add('bg-gradient-to-br', 'from-purple-50', 'to-pink-50');
+        }
+
+        async function checkAuth() {
+            if (!token) { showAuth(); return; }
+            try {
+                const response = await fetch(`${API_URL}/auth/verify`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    currentUser = data.user;
+                    await loadComplaints();
+                    showDashboard();
+                } else {
+                    localStorage.removeItem('token');
+                    token = null;
+                    showAuth();
+                }
+            } catch (error) { showAuth(); }
+        }
+
+        async function loadComplaints() {
+            try {
+                const response = await fetch(`${API_URL}/complaints`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (response.ok) complaints = await response.json();
+                else complaints = [];
+            } catch (error) { complaints = []; }
+        }
+
+        function showAuth() {
+            let isLogin = true;
+            const html = `
+                <div class="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
+                    <div class="absolute inset-0 bg-gradient-to-br from-purple-600 via-pink-500 to-red-500">
+                        <div class="absolute inset-0 bg-black opacity-20"></div>
+                    </div>
+                    <div class="absolute inset-0 overflow-hidden pointer-events-none">
+                        <div class="absolute text-4xl animate-float" style="top: 10%; left: 10%;">❤️</div>
+                        <div class="absolute text-3xl animate-float" style="top: 20%; right: 15%; animation-delay: 1s;">💕</div>
+                        <div class="absolute text-5xl animate-float" style="bottom: 15%; left: 20%; animation-delay: 2s;">💖</div>
+                        <div class="absolute text-3xl animate-float" style="bottom: 25%; right: 25%; animation-delay: 1.5s;">💗</div>
+                    </div>
+                    <div class="glass rounded-3xl p-8 w-full max-w-md relative z-10 animate-fade-in shadow-2xl">
+                        <div class="text-center mb-8">
+                            <div class="w-24 h-24 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+                                <i class="ri-heart-3-line text-5xl text-white"></i>
+                            </div>
+                            <h1 class="text-4xl font-bold text-white mb-2">Mural do Casal</h1>
+                            <p class="text-purple-100">O lugar para fortalecer seu relacionamento 💑</p>
+                        </div>
+                        <div class="mb-8">
+                            <div class="flex gap-2 bg-white/10 rounded-xl p-1">
+                                <button id="loginBtn" class="flex-1 py-2 rounded-lg font-semibold bg-white/20 text-white transition">
+                                    <i class="ri-login-circle-line mr-2"></i>Entrar
+                                </button>
+                                <button id="registerBtn" class="flex-1 py-2 rounded-lg font-semibold text-gray-200 hover:text-white transition">
+                                    <i class="ri-user-add-line mr-2"></i>Cadastrar
+                                </button>
+                            </div>
+                        </div>
+                        <form id="authForm" class="space-y-4">
+                            <div id="nameField" class="hidden">
+                                <label class="block text-white text-sm mb-2 font-medium">Seu Nome</label>
+                                <input type="text" id="name" class="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder-gray-300 focus:outline-none focus:border-purple-400" placeholder="Ex: João ou Maria" required>
+                            </div>
+                            <div>
+                                <label class="block text-white text-sm mb-2 font-medium">Email</label>
+                                <input type="email" id="email" class="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder-gray-300 focus:outline-none focus:border-purple-400" placeholder="seu@email.com" required>
+                            </div>
+                            <div>
+                                <label class="block text-white text-sm mb-2 font-medium">Senha</label>
+                                <input type="password" id="password" class="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder-gray-300 focus:outline-none focus:border-purple-400" placeholder="••••••••" required>
+                            </div>
+                            <div id="userTypeField" class="hidden">
+                                <label class="block text-white text-sm mb-2 font-medium">Você é...</label>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <label class="cursor-pointer">
+                                        <input type="radio" name="userType" value="namorado" class="hidden peer" checked>
+                                        <div class="p-3 rounded-xl bg-white/10 border border-white/20 text-center peer-checked:bg-purple-500 peer-checked:border-purple-400 transition-all">
+                                            <i class="ri-men-line text-2xl"></i>
+                                            <p class="text-sm mt-1">Namorado</p>
+                                        </div>
+                                    </label>
+                                    <label class="cursor-pointer">
+                                        <input type="radio" name="userType" value="namorada" class="hidden peer">
+                                        <div class="p-3 rounded-xl bg-white/10 border border-white/20 text-center peer-checked:bg-pink-500 peer-checked:border-pink-400 transition-all">
+                                            <i class="ri-women-line text-2xl"></i>
+                                            <p class="text-sm mt-1">Namorada</p>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+                            <button type="submit" class="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-semibold hover:shadow-lg transform hover:scale-105 transition-all mt-6">
+                                <i class="ri-heart-3-line mr-2"></i>
+                                <span id="submitText">Entrar no Mural</span>
+                            </button>
+                        </form>
+                        <div id="message" class="mt-4 text-center text-sm"></div>
+                        <div class="mt-6 text-center text-purple-200 text-xs">
+                            <i class="ri-lock-line"></i> Seu mural é privado e seguro
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('app').innerHTML = html;
+            
+            document.getElementById('loginBtn').onclick = () => {
+                isLogin = true;
+                document.getElementById('loginBtn').className = 'flex-1 py-2 rounded-lg font-semibold bg-white/20 text-white';
+                document.getElementById('registerBtn').className = 'flex-1 py-2 rounded-lg font-semibold text-gray-200 hover:text-white';
+                document.getElementById('nameField').classList.add('hidden');
+                document.getElementById('userTypeField').classList.add('hidden');
+                document.getElementById('submitText').textContent = 'Entrar no Mural';
+            };
+            document.getElementById('registerBtn').onclick = () => {
+                isLogin = false;
+                document.getElementById('registerBtn').className = 'flex-1 py-2 rounded-lg font-semibold bg-white/20 text-white';
+                document.getElementById('loginBtn').className = 'flex-1 py-2 rounded-lg font-semibold text-gray-200 hover:text-white';
+                document.getElementById('nameField').classList.remove('hidden');
+                document.getElementById('userTypeField').classList.remove('hidden');
+                document.getElementById('submitText').textContent = 'Criar Minha Conta';
+            };
+            document.getElementById('authForm').onsubmit = async (e) => {
+                e.preventDefault();
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+                const messageDiv = document.getElementById('message');
+                
+                if (isLogin) {
+                    try {
+                        const response = await fetch(`${API_URL}/auth/login`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ email, password })
+                        });
+                        const data = await response.json();
+                        if (response.ok) {
+                            localStorage.setItem('token', data.token);
+                            token = data.token;
+                            currentUser = data.user;
+                            await loadComplaints();
+                            showDashboard();
+                        } else {
+                            messageDiv.innerHTML = `<span class="text-red-300">${data.error}</span>`;
+                        }
+                    } catch (error) {
+                        messageDiv.innerHTML = `<span class="text-red-300">Erro ao conectar com o servidor</span>`;
+                    }
+                } else {
+                    const name = document.getElementById('name').value;
+                    const userType = document.querySelector('input[name="userType"]:checked')?.value;
+                    if (!name) { messageDiv.innerHTML = `<span class="text-red-300">Digite seu nome</span>`; return; }
+                    if (!userType) { messageDiv.innerHTML = `<span class="text-red-300">Selecione Namorado ou Namorada</span>`; return; }
+                    if (password.length < 4) { messageDiv.innerHTML = `<span class="text-red-300">A senha deve ter pelo menos 4 caracteres</span>`; return; }
+                    
+                    try {
+                        const response = await fetch(`${API_URL}/auth/register`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ name, email, password, userType })
+                        });
+                        const data = await response.json();
+                        if (response.ok) {
+                            messageDiv.innerHTML = `<span class="text-green-300">${data.message}</span>`;
+                            setTimeout(() => document.getElementById('loginBtn').click(), 2000);
+                        } else {
+                            messageDiv.innerHTML = `<span class="text-red-300">${data.error}</span>`;
+                        }
+                    } catch (error) {
+                        messageDiv.innerHTML = `<span class="text-red-300">Erro ao conectar com o servidor</span>`;
+                    }
+                }
+            };
+        }
+
+        function showNewComplaint() {
+            document.getElementById('complaintId').value = '';
+            document.getElementById('complaintTitle').value = '';
+            document.getElementById('complaintDescription').value = '';
+            document.getElementById('complaintCategory').value = 'Outros';
+            document.getElementById('complaintPriority').value = 'Média';
+            document.getElementById('complaintModal').classList.add('active');
+        }
+
+        async function saveComplaint() {
+            const title = document.getElementById('complaintTitle').value.trim();
+            const description = document.getElementById('complaintDescription').value.trim();
+            const category = document.getElementById('complaintCategory').value;
+            const priority = document.getElementById('complaintPriority').value;
+            const recipient = currentUser.userType === 'namorado' ? 'Namorada' : 'Namorado';
+            
+            if (!title || !description) {
+                alert('Preencha título e descrição');
+                return;
+            }
+            try {
+                const response = await fetch(`${API_URL}/complaints`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ title, description, category, priority, recipient })
+                });
+                if (response.ok) {
+                    await loadComplaints();
+                    showDashboard();
+                    document.getElementById('complaintModal').classList.remove('active');
+                } else {
+                    const error = await response.json();
+                    alert(error.error || 'Erro ao salvar');
+                }
+            } catch (error) {
+                alert('Erro ao salvar reclamação');
+            }
+        }
+
+        async function likeComplaint(id) {
+            try {
+                await fetch(`${API_URL}/complaints/${id}/like`, { method: 'PUT', headers: { 'Authorization': `Bearer ${token}` } });
+                await loadComplaints();
+                showDashboard();
+            } catch (error) { console.error(error); }
+        }
+
+        async function toggleStatus(id, currentStatus) {
+            const newStatus = currentStatus === 'pending' ? 'resolved' : 'pending';
+            try {
+                await fetch(`${API_URL}/complaints/${id}/status`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ status: newStatus })
+                });
+                await loadComplaints();
+                showDashboard();
+            } catch (error) { console.error(error); }
+        }
+
+        async function deleteComplaint(id) {
+            if (!confirm('Tem certeza que quer deletar esta reclamação?')) return;
+            try {
+                await fetch(`${API_URL}/complaints/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+                await loadComplaints();
+                showDashboard();
+            } catch (error) { alert('Erro ao deletar'); }
+        }
+
+        function getPriorityColor(priority) {
+            const colors = { 'Baixa': 'bg-blue-500/20 text-blue-500', 'Média': 'bg-yellow-500/20 text-yellow-500', 'Alta': 'bg-orange-500/20 text-orange-500', 'Urgente': 'bg-red-500/20 text-red-500' };
+            return colors[priority] || 'bg-gray-500/20 text-gray-500';
+        }
+
+        function showDashboard() {
+            const total = complaints.length;
+            const resolved = complaints.filter(c => c.status === 'resolved').length;
+            const pending = total - resolved;
+            const html = `
+                <div class="min-h-screen ${currentTheme === 'dark' ? 'bg-gray-900' : 'bg-gradient-to-br from-purple-50 to-pink-50'}">
+                    <div class="${currentTheme === 'dark' ? 'glass-dark' : 'glass'} sticky top-0 z-50 shadow-lg">
+                        <div class="container mx-auto px-4 py-4">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg">
+                                        <i class="ri-heart-3-line text-white text-xl"></i>
+                                    </div>
+                                    <h1 class="text-xl font-bold ${currentTheme === 'dark' ? 'text-white' : 'text-gray-800'}">Mural do Casal</h1>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    <button onclick="toggleTheme()" class="p-2 rounded-xl ${currentTheme === 'dark' ? 'hover:bg-gray-800' : 'hover:bg-white/50'}">
+                                        <i class="${currentTheme === 'dark' ? 'ri-sun-line text-yellow-400' : 'ri-moon-line text-gray-700'} text-xl"></i>
+                                    </button>
+                                    <div class="flex items-center gap-3 px-3 py-2 rounded-xl ${currentTheme === 'dark' ? 'bg-gray-800' : 'bg-white/50'}">
+                                        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                                            <i class="ri-user-heart-line text-white text-sm"></i>
+                                        </div>
+                                        <div class="text-right">
+                                            <div class="font-semibold ${currentTheme === 'dark' ? 'text-white' : 'text-gray-800'} text-sm">${currentUser?.name}</div>
+                                            <div class="text-xs ${currentTheme === 'dark' ? 'text-gray-400' : 'text-gray-500'}">${currentUser?.userType === 'namorado' ? '👨 Namorado' : '👩 Namorada'}</div>
+                                        </div>
+                                        <button onclick="logout()" class="ml-2 p-1 rounded-lg ${currentTheme === 'dark' ? 'hover:bg-gray-700 text-red-400' : 'hover:bg-red-100 text-red-500'}">
+                                            <i class="ri-logout-box-line text-lg"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="container mx-auto px-4 py-8">
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                            <div class="${currentTheme === 'dark' ? 'glass-dark' : 'glass'} rounded-2xl p-5 hover-lift cursor-pointer" onclick="showNewComplaint()">
+                                <i class="ri-add-line text-3xl text-purple-500 mb-2 block"></i>
+                                <div class="text-sm font-bold ${currentTheme === 'dark' ? 'text-white' : 'text-gray-800'}">Nova Reclamação</div>
+                                <div class="text-xs ${currentTheme === 'dark' ? 'text-gray-400' : 'text-gray-500'}">Clique para desabafar</div>
+                            </div>
+                            <div class="${currentTheme === 'dark' ? 'glass-dark' : 'glass'} rounded-2xl p-5">
+                                <i class="ri-chat-3-line text-3xl text-blue-500 mb-2 block"></i>
+                                <div class="text-2xl font-bold ${currentTheme === 'dark' ? 'text-white' : 'text-gray-800'}">${total}</div>
+                                <div class="text-xs ${currentTheme === 'dark' ? 'text-gray-400' : 'text-gray-500'}">Total</div>
+                            </div>
+                            <div class="${currentTheme === 'dark' ? 'glass-dark' : 'glass'} rounded-2xl p-5">
+                                <i class="ri-checkbox-circle-line text-3xl text-green-500 mb-2 block"></i>
+                                <div class="text-2xl font-bold ${currentTheme === 'dark' ? 'text-white' : 'text-gray-800'}">${resolved}</div>
+                                <div class="text-xs ${currentTheme === 'dark' ? 'text-gray-400' : 'text-gray-500'}">Resolvidas</div>
+                            </div>
+                            <div class="${currentTheme === 'dark' ? 'glass-dark' : 'glass'} rounded-2xl p-5">
+                                <i class="ri-time-line text-3xl text-yellow-500 mb-2 block"></i>
+                                <div class="text-2xl font-bold ${currentTheme === 'dark' ? 'text-white' : 'text-gray-800'}">${pending}</div>
+                                <div class="text-xs ${currentTheme === 'dark' ? 'text-gray-400' : 'text-gray-500'}">Pendentes</div>
+                            </div>
+                        </div>
+                        <h2 class="text-2xl font-bold ${currentTheme === 'dark' ? 'text-white' : 'text-gray-800'} mb-4">📝 Reclamações</h2>
+                        <div id="complaintsList" class="space-y-4">
+                            ${complaints.length === 0 ? `
+                                <div class="${currentTheme === 'dark' ? 'glass-dark' : 'glass'} rounded-2xl p-8 text-center">
+                                    <i class="ri-chat-3-line text-6xl ${currentTheme === 'dark' ? 'text-gray-600' : 'text-gray-400'} mb-4"></i>
+                                    <p class="${currentTheme === 'dark' ? 'text-gray-400' : 'text-gray-500'}">Nenhuma reclamação ainda</p>
+                                    <p class="text-sm mt-2">Clique no card acima para fazer sua primeira reclamação!</p>
+                                </div>
+                            ` : complaints.map(c => `
+                                <div class="${currentTheme === 'dark' ? 'glass-dark' : 'glass'} rounded-2xl p-5 hover-lift">
+                                    <div class="flex flex-wrap items-start justify-between gap-2 mb-3">
+                                        <div class="flex-1">
+                                            <h3 class="font-bold ${currentTheme === 'dark' ? 'text-white' : 'text-gray-800'}">${c.title}</h3>
+                                            <div class="flex items-center gap-2 mt-1 flex-wrap">
+                                                <span class="text-xs ${currentTheme === 'dark' ? 'text-gray-400' : 'text-gray-500'}"><i class="ri-user-line"></i> ${c.authorName}</span>
+                                                <span class="text-xs ${currentTheme === 'dark' ? 'text-gray-400' : 'text-gray-500'}"><i class="ri-calendar-line"></i> ${new Date(c.createdAt).toLocaleDateString('pt-BR')}</span>
+                                            </div>
+                                        </div>
+                                        <div class="flex gap-2 flex-wrap">
+                                            <span class="px-2 py-1 rounded-full text-xs ${getPriorityColor(c.priority)}">${c.priority}</span>
+                                            <span class="px-2 py-1 rounded-full text-xs ${c.status === 'resolved' ? 'bg-green-500/20 text-green-500' : 'bg-yellow-500/20 text-yellow-500'}">${c.status === 'resolved' ? '✓ Resolvida' : '⏳ Pendente'}</span>
+                                        </div>
+                                    </div>
+                                    <p class="${currentTheme === 'dark' ? 'text-gray-300' : 'text-gray-600'} text-sm mb-4">${c.description}</p>
+                                    <div class="flex gap-4 pt-2 border-t ${currentTheme === 'dark' ? 'border-gray-700' : 'border-gray-200'}">
+                                        <button onclick="likeComplaint('${c._id}')" class="flex items-center gap-1 text-sm ${currentTheme === 'dark' ? 'text-gray-400 hover:text-red-400' : 'text-gray-500 hover:text-red-500'}">
+                                            <i class="ri-heart-line"></i> ${c.likes?.length || 0}
+                                        </button>
+                                        <button onclick="toggleStatus('${c._id}', '${c.status}')" class="flex items-center gap-1 text-sm ${currentTheme === 'dark' ? 'text-gray-400 hover:text-green-400' : 'text-gray-500 hover:text-green-500'}">
+                                            <i class="ri-checkbox-circle-line"></i> ${c.status === 'resolved' ? 'Reabrir' : 'Resolver'}
+                                        </button>
+                                        ${c.author === (currentUser?.id || currentUser?._id) ? `
+                                            <button onclick="deleteComplaint('${c._id}')" class="flex items-center gap-1 text-sm ${currentTheme === 'dark' ? 'text-gray-400 hover:text-red-400' : 'text-gray-500 hover:text-red-500'}">
+                                                <i class="ri-delete-bin-line"></i> Excluir
+                                            </button>
+                                        ` : ''}
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+                <div id="complaintModal" class="modal">
+                    <div class="modal-content ${currentTheme === 'dark' ? 'glass-dark' : 'glass'} rounded-2xl p-6">
+                        <h2 class="text-xl font-bold ${currentTheme === 'dark' ? 'text-white' : 'text-gray-800'} mb-4">💬 Nova Reclamação</h2>
+                        <input type="hidden" id="complaintId">
+                        <input type="text" id="complaintTitle" placeholder="Título" class="w-full px-4 py-3 rounded-xl ${currentTheme === 'dark' ? 'bg-gray-800 text-white border-gray-700' : 'bg-white text-gray-800 border-gray-200'} border mb-3 focus:outline-none focus:border-purple-500">
+                        <textarea id="complaintDescription" rows="4" placeholder="Descreva o que está sentindo..." class="w-full px-4 py-3 rounded-xl ${currentTheme === 'dark' ? 'bg-gray-800 text-white border-gray-700' : 'bg-white text-gray-800 border-gray-200'} border mb-3 focus:outline-none focus:border-purple-500"></textarea>
+                        <select id="complaintCategory" class="w-full px-4 py-3 rounded-xl ${currentTheme === 'dark' ? 'bg-gray-800 text-white border-gray-700' : 'bg-white text-gray-800 border-gray-200'} border mb-3">
+                            <option value="Atenção">📢 Atenção</option><option value="Ciúmes">💚 Ciúmes</option><option value="Comunicação">💬 Comunicação</option>
+                            <option value="Tempo Juntos">⏰ Tempo Juntos</option><option value="Saídas">🎉 Saídas</option><option value="Organização">📋 Organização</option>
+                            <option value="Carinho">🤗 Carinho</option><option value="Comportamento">🎭 Comportamento</option><option value="Outros">📌 Outros</option>
+                        </select>
+                        <select id="complaintPriority" class="w-full px-4 py-3 rounded-xl ${currentTheme === 'dark' ? 'bg-gray-800 text-white border-gray-700' : 'bg-white text-gray-800 border-gray-200'} border mb-4">
+                            <option value="Baixa">🟢 Baixa</option><option value="Média">🟡 Média</option><option value="Alta">🟠 Alta</option><option value="Urgente">🔴 Urgente</option>
+                        </select>
+                        <div class="flex gap-2">
+                            <button onclick="saveComplaint()" class="flex-1 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-semibold">Enviar</button>
+                            <button onclick="document.getElementById('complaintModal').classList.remove('active')" class="flex-1 py-3 ${currentTheme === 'dark' ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'} rounded-xl">Cancelar</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('app').innerHTML = html;
+        }
+
+        function toggleTheme() {
+            currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            localStorage.setItem('theme', currentTheme);
+            if (currentTheme === 'dark') {
+                document.body.classList.add('dark', 'bg-gray-900');
+                document.body.classList.remove('bg-gradient-to-br', 'from-purple-50', 'to-pink-50');
+            } else {
+                document.body.classList.remove('dark', 'bg-gray-900');
+                document.body.classList.add('bg-gradient-to-br', 'from-purple-50', 'to-pink-50');
+            }
+            showDashboard();
+        }
+
+        function logout() { localStorage.removeItem('token'); token = null; currentUser = null; showAuth(); }
+        checkAuth();
+    </script>
+</body>
+</html>
