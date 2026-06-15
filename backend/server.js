@@ -275,6 +275,21 @@ app.use(express.static(path.join(__dirname, '../frontend')));
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });
+// ====== SOCKET.IO CHAT AO VIVO ======
+const { Server } = require('socket.io');
+const io = new Server(server, { cors: { origin: '*' } });
+const chatHistory = []; // Guarda as últimas mensagens na memória
+
+io.on('connection', (socket) => {
+    socket.emit('chatHistory', chatHistory);
+    
+    socket.on('chatMessage', (msg) => {
+        chatHistory.push(msg);
+        if (chatHistory.length > 100) chatHistory.shift();
+        io.emit('chatMessage', msg);
+    });
+});
+// ====================================
 
 // Conectar ao MongoDB e iniciar servidor
 const MONGODB_URI_FINAL = process.env.MONGODB_URI || MONGODB_URI;

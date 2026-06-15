@@ -6,6 +6,7 @@
     <title>Mural do Casal - Fortaleça seu relacionamento 💑</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdn.jsdelivr.net/npm/remixicon@4.3.0/fonts/remixicon.css" rel="stylesheet">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <style>
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(20px); }
@@ -61,6 +62,7 @@
         let token = localStorage.getItem('token');
         let currentTheme = localStorage.getItem('theme') || 'dark';
         let complaints = [];
+        let socket = null;
 
         if (currentTheme === 'dark') {
             document.body.classList.add('dark', 'bg-gray-900');
@@ -79,6 +81,7 @@
                     currentUser = data.user;
                     await loadComplaints();
                     showDashboard();
+                    initChat();
                 } else {
                     localStorage.removeItem('token');
                     token = null;
@@ -210,6 +213,7 @@
                             currentUser = data.user;
                             await loadComplaints();
                             showDashboard();
+                            initChat();
                         } else {
                             messageDiv.innerHTML = `<span class="text-red-300">${data.error}</span>`;
                         }
@@ -437,6 +441,28 @@
                         </div>
                     </div>
                 </div>
+                <!-- CHAT WIDGET -->
+                <div id="chatWidget" class="fixed bottom-6 right-6 z-50 flex flex-col items-end">
+                    <div id="chatWindow" class="hidden w-80 h-96 ${currentTheme === 'dark' ? 'glass-dark' : 'glass'} rounded-2xl shadow-2xl mb-4 flex-col overflow-hidden">
+                        <div class="p-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold flex justify-between items-center shadow-md z-10">
+                            <div class="flex items-center gap-2"><i class="ri-chat-heart-line text-xl"></i> Chat do Casal</div>
+                            <button onclick="toggleChat()" class="hover:text-purple-200 transition"><i class="ri-close-line text-xl"></i></button>
+                        </div>
+                        <div id="chatMessages" class="flex-1 p-3 overflow-y-auto flex flex-col gap-2 bg-white/5">
+                            <!-- Messages go here -->
+                        </div>
+                        <div class="p-2 border-t ${currentTheme === 'dark' ? 'border-gray-700 bg-gray-800/80' : 'border-gray-200 bg-white/80'} backdrop-blur-md">
+                            <form id="chatForm" onsubmit="sendChatMessage(event)" class="flex gap-2">
+                                <input type="text" id="chatInput" placeholder="Digite uma mensagem..." class="flex-1 px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 ${currentTheme === 'dark' ? 'bg-gray-700 text-white border-gray-600' : 'bg-gray-100 text-gray-800 border-gray-200'} border" required>
+                                <button type="submit" class="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 text-white flex items-center justify-center hover-lift"><i class="ri-send-plane-fill"></i></button>
+                            </form>
+                        </div>
+                    </div>
+                    <button id="chatToggleBtn" onclick="toggleChat()" class="w-14 h-14 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-xl hover-lift flex items-center justify-center text-2xl relative">
+                        <i class="ri-chat-3-line"></i>
+                        <span id="chatBadge" class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full border-2 border-white"></span>
+                    </button>
+                </div>
             `;
             document.getElementById('app').innerHTML = html;
         }
@@ -454,7 +480,86 @@
             showDashboard();
         }
 
-        function logout() { localStorage.removeItem('token'); token = null; currentUser = null; showAuth(); }
+        function initChat() {
+            if (!socket) {
+                const baseURL = isLocal ? 'http://localhost:3000' : '';
+                socket = io(baseURL);
+                
+                socket.on('chatHistory', (history) => {
+                    const chatMessages = document.getElementById('chatMessages');
+                    if (chatMessages) {
+                        chatMessages.innerHTML = '';
+                        history.forEach(appendChatMessage);
+                    }
+                });
+
+                socket.on('chatMessage', (msg) => {
+                    appendChatMessage(msg);
+                    if (document.getElementById('chatWindow') && document.getElementById('chatWindow').classList.contains('hidden')) {
+                        const badge = document.getElementById('chatBadge');
+                        if(badge) {
+                            badge.textContent = (parseInt(badge.textContent || '0') + 1);
+                            badge.classList.remove('hidden');
+                        }
+                    }
+                });
+            }
+        }
+
+        function toggleChat() {
+            const chatWindow = document.getElementById('chatWindow');
+            if(chatWindow) {
+                chatWindow.classList.toggle('hidden');
+                chatWindow.classList.toggle('flex');
+                if (!chatWindow.classList.contains('hidden')) {
+                    const badge = document.getElementById('chatBadge');
+                    if(badge) {
+                        badge.classList.add('hidden');
+                        badge.textContent = '';
+                    }
+                    const msgs = document.getElementById('chatMessages');
+                    if(msgs) msgs.scrollTop = msgs.scrollHeight;
+                    const input = document.getElementById('chatInput');
+                    if(input) input.focus();
+                }
+            }
+        }
+
+        function appendChatMessage(msg) {
+            const chatMessages = document.getElementById('chatMessages');
+            if (!chatMessages) return;
+            const isMe = msg.userId === (currentUser._id || currentUser.id);
+            const alignClass = isMe ? 'self-end bg-purple-500 text-white rounded-br-none' : 'self-start bg-gray-200 text-gray-800 rounded-bl-none dark:bg-gray-700 dark:text-gray-100';
+            
+            const msgHtml = `
+                <div class="max-w-[80%] p-2 rounded-2xl shadow-sm text-sm ${alignClass}">
+                    ${!isMe ? `<div class="text-[10px] font-bold opacity-70 mb-1">${msg.name}</div>` : ''}
+                    <div style="word-break: break-word;">${msg.text}</div>
+                </div>
+            `;
+            chatMessages.insertAdjacentHTML('beforeend', msgHtml);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function sendChatMessage(e) {
+            e.preventDefault();
+            const input = document.getElementById('chatInput');
+            if(!input) return;
+            const text = input.value.trim();
+            if (text && socket) {
+                socket.emit('chatMessage', {
+                    userId: currentUser._id || currentUser.id,
+                    name: currentUser.name,
+                    text: text
+                });
+                input.value = '';
+            }
+        }
+
+        function logout() { 
+            if(socket) { socket.disconnect(); socket = null; }
+            localStorage.removeItem('token'); token = null; currentUser = null; showAuth(); 
+        }
         checkAuth();
     </script>
 </body>
