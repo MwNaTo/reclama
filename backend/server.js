@@ -25,6 +25,8 @@ const UserSchema = new mongoose.Schema({
     password: { type: String, required: true },
     userType: { type: String, enum: ['namorado', 'namorada'], required: true },
     profilePhoto: { type: String, default: '' },
+    loveCoins: { type: Number, default: 0 },
+    achievements: [{ type: String }],
     createdAt: { type: Date, default: Date.now }
 });
 
@@ -120,7 +122,9 @@ app.post('/api/auth/login', async (req, res) => {
                 id: user._id,
                 name: user.name,
                 email: user.email,
-                userType: user.userType
+                userType: user.userType,
+                loveCoins: user.loveCoins || 0,
+                achievements: user.achievements || []
             }
         });
     } catch (error) {
@@ -135,7 +139,9 @@ app.get('/api/auth/verify', authenticate, (req, res) => {
             id: req.user._id,
             name: req.user.name,
             email: req.user.email,
-            userType: req.user.userType
+            userType: req.user.userType,
+            loveCoins: req.user.loveCoins || 0,
+            achievements: req.user.achievements || []
         }
     });
 });
@@ -275,18 +281,95 @@ app.use(express.static(path.join(__dirname, '../frontend')));
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });
-// ====== SOCKET.IO CHAT AO VIVO ======
+// ====== SOCKET.IO CHAT E JOGOS ======
 const { Server } = require('socket.io');
 const io = new Server(server, { cors: { origin: '*' } });
-const chatHistory = []; // Guarda as últimas mensagens na memória
+const chatHistory = []; 
+const activeRooms = {};
+
+function generateRoomCode() {
+    return Math.floor(1000 + Math.random() * 9000).toString();
+}
 
 io.on('connection', (socket) => {
+    // Chat
     socket.emit('chatHistory', chatHistory);
-    
     socket.on('chatMessage', (msg) => {
         chatHistory.push(msg);
         if (chatHistory.length > 100) chatHistory.shift();
         io.emit('chatMessage', msg);
+    });
+
+    // Salas de Jogo
+    socket.on('createRoom', (data) => {
+        const roomCode = generateRoomCode();
+        activeRooms[roomCode] = {
+            players: [{ socketId: socket.id, userId: data.userId, name: data.name, score: 0, ready: false }],
+            gameStarted: false,
+            gameType: 'clickRace'
+        };
+        socket.join(roomCode);
+        socket.emit('roomCreated', roomCode);
+    });
+
+    socket.on('joinRoom', (data) => {
+        const room = activeRooms[data.roomCode];
+        if (room) {
+            if (room.players.length < 2) {
+                room.players.push({ socketId: socket.id, userId: data.userId, name: data.name, score: 0, ready: false });
+                socket.join(data.roomCode);
+                io.to(data.roomCode).emit('roomUpdated', room);
+            } else {
+                socket.emit('roomError', 'Sala cheia');
+            }
+        } else {
+            socket.emit('roomError', 'Sala não encontrada');
+        }
+    });
+
+    socket.on('playerReady', (roomCode) => {
+        const room = activeRooms[roomCode];
+        if (room) {
+            const player = room.players.find(p => p.socketId === socket.id);
+            if (player) player.ready = true;
+            io.to(roomCode).emit('roomUpdated', room);
+            
+            // Check if both ready
+            if (room.players.length === 2 && room.players.every(p => p.ready)) {
+                room.gameStarted = true;
+                io.to(roomCode).emit('gameStarting', 3); // 3 seconds countdown
+                setTimeout(() => {
+                    io.to(roomCode).emit('gameStarted');
+                    // Ends game after 10 seconds for Click Race
+                    setTimeout(() => {
+                        io.to(roomCode).emit('gameOver', room);
+                    }, 10000);
+                }, 3000);
+            }
+        }
+    });
+
+    socket.on('clickRaceClick', (roomCode) => {
+        const room = activeRooms[roomCode];
+        if (room && room.gameStarted) {
+            const player = room.players.find(p => p.socketId === socket.id);
+            if (player) {
+                player.score += 1;
+                io.to(roomCode).emit('scoreUpdated', room);
+            }
+        }
+    });
+
+    socket.on('disconnect', () => {
+        // Remove from rooms
+        for (const [code, room] of Object.entries(activeRooms)) {
+            const pIndex = room.players.findIndex(p => p.socketId === socket.id);
+            if (pIndex !== -1) {
+                room.players.splice(pIndex, 1);
+                if (room.players.length === 0) delete activeRooms[code];
+                else io.to(code).emit('roomUpdated', room);
+            }
+        }
     });
 });
 // ====================================

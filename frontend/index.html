@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdn.jsdelivr.net/npm/remixicon@4.3.0/fonts/remixicon.css" rel="stylesheet">
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="/games.js"></script>
     <style>
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(20px); }
@@ -357,6 +358,11 @@
                         </div>
                     </div>
                     <div class="container mx-auto px-4 py-8">
+                        <div class="flex justify-center mb-8">
+                            <button onclick="showGameRoom()" class="px-8 py-4 bg-gradient-to-r from-orange-400 to-red-500 text-white rounded-2xl font-bold shadow-lg hover-lift flex items-center gap-3 text-lg w-full md:w-auto justify-center">
+                                <i class="ri-gamepad-line text-3xl"></i> Entrar na Sala de Jogos
+                            </button>
+                        </div>
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                             <div class="${currentTheme === 'dark' ? 'glass-dark' : 'glass'} rounded-2xl p-5 hover-lift cursor-pointer" onclick="showNewComplaint()">
                                 <i class="ri-add-line text-3xl text-purple-500 mb-2 block"></i>
