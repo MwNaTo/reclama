@@ -327,6 +327,14 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on('changeGameType', (data) => {
+        const room = activeRooms[data.roomCode];
+        if (room && room.players[0].socketId === socket.id) { // Only creator can change
+            room.gameType = data.gameType;
+            io.to(data.roomCode).emit('roomUpdated', room);
+        }
+    });
+
     socket.on('playerReady', (roomCode) => {
         const room = activeRooms[roomCode];
         if (room) {
@@ -339,19 +347,77 @@ io.on('connection', (socket) => {
                 room.gameStarted = true;
                 io.to(roomCode).emit('gameStarting', 3); // 3 seconds countdown
                 setTimeout(() => {
-                    io.to(roomCode).emit('gameStarted');
-                    // Ends game after 10 seconds for Click Race
-                    setTimeout(() => {
-                        io.to(roomCode).emit('gameOver', room);
-                    }, 10000);
+                    io.to(roomCode).emit('gameStarted', room.gameType);
+                    
+                    // Game-specific server start logic
+                    if (room.gameType === 'clickRace') {
+                        setTimeout(() => {
+                            io.to(roomCode).emit('gameOver', room);
+                        }, 10000);
+                    } else if (room.gameType === 'reaction') {
+                        startReactionRound(roomCode);
+                    }
                 }, 3000);
             }
         }
     });
 
+    // --- GENERIC GAME EVENTS ---
+    socket.on('gameEvent', (data) => {
+        const { roomCode, action, payload } = data;
+        const room = activeRooms[roomCode];
+        if (!room) return;
+
+        if (action === 'ticTacToeMove') {
+            io.to(roomCode).emit('gameEvent', { action: 'ticTacToeMove', payload });
+        }
+        else if (action === 'ticTacToeReset') {
+            io.to(roomCode).emit('gameEvent', { action: 'ticTacToeReset' });
+        }
+        else if (action === 'spinRoulette') {
+            const questions = [
+                "Qual a mania minha que você mais acha engraçada?",
+                "Qual foi a primeira coisa que você pensou quando nos conhecemos?",
+                "O que eu faço que mais te deixa com frio na barriga?",
+                "Qual sua memória favorita nossa no último ano?",
+                "Se pudéssemos viajar para qualquer lugar amanhã, para onde iríamos?"
+            ];
+            const q = questions[Math.floor(Math.random() * questions.length)];
+            const targetPlayer = room.players[Math.floor(Math.random() * room.players.length)].name;
+            io.to(roomCode).emit('gameEvent', { action: 'spinRoulette', payload: { question: q, target: targetPlayer } });
+        }
+        else if (action === 'reactionClick') {
+            const player = room.players.find(p => p.socketId === socket.id);
+            if (room.reactionGreen && player) {
+                room.reactionGreen = false;
+                io.to(roomCode).emit('gameEvent', { action: 'reactionWin', payload: { winner: player.name } });
+                setTimeout(() => startReactionRound(roomCode), 3000);
+            } else if (!room.reactionGreen && player) {
+                // Clicked too early
+                io.to(roomCode).emit('gameEvent', { action: 'reactionEarly', payload: { loser: player.name } });
+                setTimeout(() => startReactionRound(roomCode), 3000);
+            }
+        }
+    });
+
+    function startReactionRound(roomCode) {
+        const room = activeRooms[roomCode];
+        if(room) {
+            room.reactionGreen = false;
+            io.to(roomCode).emit('gameEvent', { action: 'reactionWait' });
+            const waitTime = Math.floor(Math.random() * 4000) + 2000; // 2-6 seconds
+            setTimeout(() => {
+                if(activeRooms[roomCode]) {
+                    activeRooms[roomCode].reactionGreen = true;
+                    io.to(roomCode).emit('gameEvent', { action: 'reactionGo' });
+                }
+            }, waitTime);
+        }
+    }
+
     socket.on('clickRaceClick', (roomCode) => {
         const room = activeRooms[roomCode];
-        if (room && room.gameStarted) {
+        if (room && room.gameStarted && room.gameType === 'clickRace') {
             const player = room.players.find(p => p.socketId === socket.id);
             if (player) {
                 player.score += 1;
